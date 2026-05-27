@@ -37,7 +37,9 @@ V0 should support:
 - Local token storage and refresh.
 - Design reference resolution.
 - Design list, get, and page metadata.
+- Design export-format discovery.
 - Export to `pptx`, `pdf`, `png`, and later other supported formats.
+- Profile, folder, and asset read commands.
 - PPTX inspection for slide visibility.
 - JSON and JSONL output modes.
 - Batch input from file or stdin.
@@ -267,6 +269,7 @@ canvapie list --all --jsonl
 canvapie get "<design-ref>" --json
 canvapie pages "<design-ref>" --json
 canvapie search "<title-keyword>" --json
+canvapie export-formats "<design-ref>" --json
 ```
 
 Resource-style aliases:
@@ -277,7 +280,21 @@ canvapie designs list --all --jsonl
 canvapie designs get "<design-ref>" --json
 canvapie designs pages "<design-ref>" --json
 canvapie designs search "<title-keyword>" --json
+canvapie designs export-formats "<design-ref>" --json
 ```
+
+### Profile, Folders, and Assets
+
+```sh
+canvapie profile get --json
+canvapie folders get root --json
+canvapie folders list root --limit 25 --json
+canvapie folders items uploads --item-types image --json
+canvapie assets get "<asset-id>" --json
+```
+
+These are read-only adapters for `profile:read`, `folder:read`, and `asset:read`.
+Outputs should avoid temporary access URLs by default and return stable IDs, names/titles, timestamps, and thumbnail presence.
 
 ### Export
 
@@ -511,6 +528,7 @@ Example:
 - Implement `auth login/status/logout`.
 - Implement `resolve`.
 - Implement `designs list/get/pages/search`.
+- Implement `designs export-formats`, `profile get`, `folders get/list/items`, and `assets get`.
 - Implement `export`.
 - Implement `ppt inspect`.
 - Implement `ppt remove-hidden`.

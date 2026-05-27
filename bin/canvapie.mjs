@@ -8,7 +8,7 @@ import readline from "node:readline/promises";
 import { spawnSync } from "node:child_process";
 import { URL, URLSearchParams } from "node:url";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const DEFAULT_SCOPES = [
   "design:meta:read",
   "design:content:read",
@@ -97,6 +97,18 @@ async function main(argv) {
     return handleDesigns(subcommand, rest, options, config);
   }
 
+  if (command === "profile") {
+    return handleProfile(subcommand, rest, options, config);
+  }
+
+  if (command === "folders") {
+    return handleFolders(subcommand, rest, options, config);
+  }
+
+  if (command === "assets") {
+    return handleAssets(subcommand, rest, options, config);
+  }
+
   if (command === "list") {
     return handleDesigns("list", [subcommand, ...rest].filter(Boolean), options, config);
   }
@@ -111,6 +123,11 @@ async function main(argv) {
 
   if (command === "pages") {
     return handleDesigns("pages", [subcommand, ...rest].filter(Boolean), options, config);
+  }
+
+  if (command === "export-formats") {
+    const ref = firstRef([subcommand, ...rest].filter(Boolean), options);
+    return writeJson(envelope("export-formats", await exportFormatsCommand(ref, config)));
   }
 
   if (command === "export") {
@@ -186,7 +203,51 @@ async function handleDesigns(subcommand, rest, options, config) {
     return writeJson(envelope("designs pages", { resolved, pages }));
   }
 
-  throw userError("invalid_arguments", "Expected designs subcommand: list, search, get, or pages.", EXIT.invalidArgs);
+  if (subcommand === "export-formats" || subcommand === "formats") {
+    const ref = firstRef(rest, options);
+    return writeJson(envelope("designs export-formats", await exportFormatsCommand(ref, config)));
+  }
+
+  throw userError("invalid_arguments", "Expected designs subcommand: list, search, get, pages, or export-formats.", EXIT.invalidArgs);
+}
+
+async function handleProfile(subcommand, rest, options, config) {
+  if (!subcommand || subcommand === "get" || subcommand === "me") {
+    return writeJson(envelope("profile get", await getProfile(config)));
+  }
+
+  throw userError("invalid_arguments", "Expected profile subcommand: get.", EXIT.invalidArgs);
+}
+
+async function handleFolders(subcommand, rest, options, config) {
+  if (subcommand === "get") {
+    const folderId = folderIdFrom(rest, options, "root");
+    return writeJson(envelope("folders get", await getFolder(config, folderId)));
+  }
+
+  if (subcommand === "items" || subcommand === "list") {
+    const folderId = folderIdFrom(rest, options, "root");
+    const result = await listFolderItems(config, folderId, {
+      limit: Number(options.limit || 50),
+      all: Boolean(options.all),
+      continuation: options.continuation,
+      itemTypes: options.itemTypes || options.type,
+      sortBy: options.sortBy,
+      pinStatus: options.pinStatus,
+    });
+    return writeJson(envelope(subcommand === "list" ? "folders list" : "folders items", result));
+  }
+
+  throw userError("invalid_arguments", "Expected folders subcommand: get, items, or list.", EXIT.invalidArgs);
+}
+
+async function handleAssets(subcommand, rest, options, config) {
+  if (subcommand === "get") {
+    const assetId = firstValue(rest, options, "asset ID", "assetId");
+    return writeJson(envelope("assets get", await getAsset(config, assetId)));
+  }
+
+  throw userError("invalid_arguments", "Expected assets subcommand: get.", EXIT.invalidArgs);
 }
 
 async function handlePpt(subcommand, rest, options) {
@@ -373,6 +434,26 @@ FLAGS:
   --jsonl             write one JSON envelope per input line
   -h, --help          help for export
 `,
+    "export-formats": `canvapie ${VERSION}
+
+Get the export formats available for a Canva design.
+
+USAGE:
+  canvapie export-formats <design-ref> --json
+  canvapie designs export-formats <design-ref> --json
+
+DESIGN REFERENCES:
+  <design-id>
+  https://www.canva.cn/design/<design-id>/edit
+  <title-keyword>
+
+REQUIRED SCOPES:
+  design:content:read
+
+FLAGS:
+  --ref <design-ref>  pass reference as a flag
+  -h, --help          help for export-formats
+`,
     read: `canvapie ${VERSION}
 
 Read Canva design metadata.
@@ -389,11 +470,69 @@ RESOURCE-STYLE ALIASES:
   canvapie designs search <query> --json
   canvapie designs get <design-ref> --json
   canvapie designs pages <design-ref> --json
+  canvapie designs export-formats <design-ref> --json
 
 FLAGS:
   --limit <N>  max designs to list
   --all        paginate all list results
   -h, --help   help for read commands
+`,
+    profile: `canvapie ${VERSION}
+
+Read the current Canva user's profile.
+
+USAGE:
+  canvapie profile get --json
+  canvapie profile --json
+
+REQUIRED SCOPES:
+  profile:read
+
+FLAGS:
+  -h, --help  help for profile
+`,
+    folders: `canvapie ${VERSION}
+
+Read Canva folder metadata and folder contents.
+
+USAGE:
+  canvapie folders get [folder-id] --json
+  canvapie folders items [folder-id] --json
+  canvapie folders list [folder-id] --json
+
+DEFAULT FOLDER:
+  root
+
+SPECIAL FOLDERS:
+  root      top-level Projects folder
+  uploads   user's Uploads folder
+
+FLAGS:
+  --folder-id <id>       pass folder ID as a flag
+  --limit <N>            max items to list
+  --all                  paginate all folder items
+  --continuation <token> continue a previous list request
+  --item-types <types>   design | folder | image, comma-delimited
+  --sort-by <sort>       modified_descending, title_ascending, etc.
+  --pin-status <status>  any | pinned
+  -h, --help             help for folders
+
+REQUIRED SCOPES:
+  folder:read
+`,
+    assets: `canvapie ${VERSION}
+
+Read Canva asset metadata.
+
+USAGE:
+  canvapie assets get <asset-id> --json
+
+REQUIRED SCOPES:
+  asset:read
+
+FLAGS:
+  --asset-id <id>  pass asset ID as a flag
+  -h, --help      help for assets
 `,
     inspect: `canvapie ${VERSION}
 
@@ -468,12 +607,15 @@ Available Commands:
   auth       OAuth credentials and authorization management
   doctor     CLI health check: config, auth, scopes, and token expiry
   export     Export a Canva design
+  export-formats
+             Get available export formats for a design
   get        Read one design's metadata
   help       Help about any command
   init       Initialize Canva integration config
   inspect    Inspect an exported PPTX
   list       List accessible designs
   pages      List pages in a design
+  profile    Read current Canva user profile
   read       Alias for get
   remove-hidden
              Remove hidden slides from an exported PPTX
@@ -481,7 +623,9 @@ Available Commands:
   search     Search designs by title keyword
 
 Advanced Resource Aliases:
-  designs    Design metadata commands: list, search, get, pages
+  assets     Asset metadata commands: get
+  designs    Design metadata commands: list, search, get, pages, export-formats
+  folders    Folder metadata and item commands: get, list, items
   ppt        PPTX commands: inspect
 
 Use "canvapie <command> --help" for more information about a command.
@@ -491,8 +635,14 @@ Use "canvapie <command> --help" for more information about a command.
 
 function normalizeHelpTopic(topic = "") {
   const normalized = String(topic).trim();
+  if (normalized === "export-formats" || normalized === "designs export-formats" || normalized === "designs formats") {
+    return "export-formats";
+  }
   if (["get", "list", "pages", "read", "search", "designs"].includes(normalized)) return "read";
   if (normalized.startsWith("designs ")) return "read";
+  if (normalized === "profile" || normalized === "profile get" || normalized === "profile me") return "profile";
+  if (normalized === "folders" || normalized.startsWith("folders ")) return "folders";
+  if (normalized === "assets" || normalized.startsWith("assets ")) return "assets";
   if (normalized === "remove-hidden") return "inspect";
   if (normalized === "ppt" || normalized === "ppt inspect") return "inspect";
   if (normalized === "ppt remove-hidden") return "inspect";
@@ -542,14 +692,22 @@ function normalizeOptionKey(rawKey) {
 }
 
 function firstRef(values, options) {
-  if (options.ref) {
-    return options.ref;
+  return firstValue(values, options, "design reference", "ref");
+}
+
+function firstValue(values, options, label, optionKey) {
+  if (options[optionKey]) {
+    return options[optionKey];
   }
-  const ref = values.find(Boolean);
-  if (!ref) {
-    throw userError("invalid_arguments", "Missing design reference.", EXIT.invalidArgs);
+  const value = values.find(Boolean);
+  if (!value) {
+    throw userError("invalid_arguments", `Missing ${label}.`, EXIT.invalidArgs);
   }
-  return ref;
+  return value;
+}
+
+function folderIdFrom(values, options, defaultValue = "root") {
+  return options.folderId || values.find(Boolean) || defaultValue;
 }
 
 function isBatchMode(options) {
@@ -1184,6 +1342,7 @@ async function apiFetch(config, endpoint, init = {}) {
 }
 
 async function listDesigns(config, { limit = 25, all = false, includeUrls = false } = {}) {
+  requireScope(config, "design:meta:read");
   const items = [];
   let continuation;
   do {
@@ -1199,11 +1358,13 @@ async function listDesigns(config, { limit = 25, all = false, includeUrls = fals
 }
 
 async function getDesign(config, designId) {
+  requireScope(config, "design:meta:read");
   const payload = await apiFetch(config, `/designs/${encodeURIComponent(designId)}`);
   return payload.design || payload.item || payload;
 }
 
 async function getDesignPages(config, designId) {
+  requireScope(config, "design:meta:read");
   const payload = await apiFetch(config, `/designs/${encodeURIComponent(designId)}/pages?limit=200`);
   return {
     count: payload.items?.length || 0,
@@ -1247,6 +1408,25 @@ async function resolveDesignRef(ref, config) {
 
   const searched = await searchDesigns(ref, config);
   return resolveCandidates(ref, searched.candidates, "title_search");
+}
+
+async function exportFormatsCommand(ref, config) {
+  const resolved = await resolveDesignIdRef(ref, config);
+  const exportFormats = await getDesignExportFormats(config, resolved.design_id);
+  return { resolved, ...exportFormats };
+}
+
+async function resolveDesignIdRef(ref, config) {
+  const parsed = parseDesignRef(ref);
+  if (parsed.design_id) {
+    return {
+      resource_type: "design",
+      design_id: parsed.design_id,
+      matched_by: parsed.matched_by,
+      confidence: parsed.confidence,
+    };
+  }
+  return resolveDesignRef(ref, config);
 }
 
 function resolveCandidates(ref, candidates, matchedBy) {
@@ -1295,6 +1475,62 @@ function parseDesignRef(ref) {
   }
 
   return { title: ref, matched_by: "title_search", confidence: "low" };
+}
+
+async function getDesignExportFormats(config, designId) {
+  requireScope(config, "design:content:read");
+  const payload = await apiFetch(config, `/designs/${encodeURIComponent(designId)}/export-formats`);
+  const options = payload.formats || {};
+  return {
+    design_id: designId,
+    formats: Object.keys(options),
+    options,
+  };
+}
+
+async function getProfile(config) {
+  requireScope(config, "profile:read");
+  const payload = await apiFetch(config, "/users/me/profile");
+  return { profile: sanitizeProfile(payload.profile || payload) };
+}
+
+async function getFolder(config, folderId) {
+  requireScope(config, "folder:read");
+  const payload = await apiFetch(config, `/folders/${encodeURIComponent(folderId)}`);
+  return { folder: sanitizeFolder(payload.folder || payload) };
+}
+
+async function listFolderItems(
+  config,
+  folderId,
+  { limit = 50, all = false, continuation, itemTypes, sortBy, pinStatus } = {},
+) {
+  requireScope(config, "folder:read");
+  const items = [];
+  let nextContinuation = continuation;
+  do {
+    const params = new URLSearchParams({ limit: String(Math.min(limit, 100)) });
+    if (nextContinuation) params.set("continuation", nextContinuation);
+    if (itemTypes) params.set("item_types", String(itemTypes));
+    if (sortBy) params.set("sort_by", String(sortBy));
+    if (pinStatus) params.set("pin_status", String(pinStatus));
+    const payload = await apiFetch(config, `/folders/${encodeURIComponent(folderId)}/items?${params}`);
+    items.push(...(payload.items || []).map(sanitizeFolderItem));
+    nextContinuation = payload.continuation;
+  } while (all && nextContinuation);
+  return {
+    folder_id: folderId,
+    count: items.length,
+    has_continuation: Boolean(nextContinuation),
+    continuation: nextContinuation,
+    items,
+  };
+}
+
+async function getAsset(config, assetId) {
+  requireScope(config, "asset:read");
+  const payload = await apiFetch(config, `/assets/${encodeURIComponent(assetId)}`);
+  return { asset: sanitizeAsset(payload.asset || payload) };
 }
 
 async function exportCommand(ref, options, config) {
@@ -1555,6 +1791,62 @@ function sanitizeDesign(design, { includeUrls = false } = {}) {
     result.view_url = design.urls?.view_url || design.view_url;
   }
   return result;
+}
+
+function sanitizeProfile(profile = {}) {
+  return {
+    display_name: profile.display_name,
+  };
+}
+
+function sanitizeFolder(folder = {}) {
+  return {
+    id: folder.id,
+    name: folder.name,
+    created_at: folder.created_at,
+    updated_at: folder.updated_at,
+    has_thumbnail: Boolean(folder.thumbnail),
+  };
+}
+
+function sanitizeAsset(asset = {}) {
+  return {
+    type: asset.type,
+    id: asset.id,
+    name: asset.name,
+    tags: asset.tags,
+    owner: asset.owner,
+    created_at: asset.created_at,
+    updated_at: asset.updated_at,
+    has_thumbnail: Boolean(asset.thumbnail),
+    metadata: sanitizeAssetMetadata(asset.metadata),
+  };
+}
+
+function sanitizeAssetMetadata(metadata) {
+  if (!metadata) {
+    return undefined;
+  }
+  return {
+    type: metadata.type,
+    width: metadata.width,
+    height: metadata.height,
+    duration: metadata.duration,
+    smart_tags: metadata.smart_tags,
+  };
+}
+
+function sanitizeFolderItem(item = {}) {
+  if (item.type === "folder") {
+    return { type: "folder", folder: sanitizeFolder(item.folder || {}) };
+  }
+  if (item.type === "design") {
+    return { type: "design", design: sanitizeDesign(item.design || {}) };
+  }
+  if (item.type === "image") {
+    return { type: "image", image: sanitizeAsset(item.image || {}) };
+  }
+  return { type: item.type || "unknown" };
 }
 
 function buildExportFormat(format, pages) {

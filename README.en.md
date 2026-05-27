@@ -18,7 +18,7 @@ canvapie help
 To pin the current version:
 
 ```sh
-npm install -g canvapie@0.1.0
+npm install -g canvapie@0.2.0
 ```
 
 Then complete first-time authorization:
@@ -39,6 +39,10 @@ canvapie doctor --json
 canvapie resolve "https://www.canva.cn/design/<design-id>/edit" --json
 canvapie resolve "<title-keyword>" --json
 canvapie pages <design-id> --json
+canvapie export-formats <design-id> --json
+canvapie profile get --json
+canvapie folders list root --limit 10 --json
+canvapie folders list uploads --item-types image --limit 10 --json
 canvapie export "<title-keyword>" --format pptx --pages 1 --out cli-exports --inspect --json
 canvapie inspect exports/<design-id>.pptx --json
 canvapie resolve --input refs.txt --jsonl
@@ -211,6 +215,7 @@ canvapie list --limit 25 --json
 canvapie search "<title-keyword>" --json
 canvapie get "<title-keyword>" --json
 canvapie pages <design-id> --json
+canvapie export-formats <design-id> --json
 ```
 
 The resource-style aliases are also kept for scripts that want to stay closer to the API shape:
@@ -220,9 +225,39 @@ canvapie designs list --limit 25 --json
 canvapie designs search "<title-keyword>" --json
 canvapie designs get "<title-keyword>" --json
 canvapie designs pages <design-id> --json
+canvapie designs export-formats <design-id> --json
 ```
 
 `pages` / `designs pages` reads page metadata from Canva Connect API. The API does not currently expose hidden-slide state directly.
+
+`export-formats` / `designs export-formats` returns the formats currently available for a specific design. It does not add new export formats; it helps agents check whether the target design supports `pptx`, `pdf`, `png`, and other formats before exporting.
+
+### Read Profile / Folder / Asset
+
+```sh
+canvapie profile get --json
+canvapie folders get root --json
+canvapie folders list root --limit 25 --json
+canvapie folders list uploads --item-types image --limit 25 --json
+canvapie assets get <asset-id> --json
+```
+
+These commands require:
+
+```text
+profile:read
+folder:read
+asset:read
+```
+
+`folders list` defaults to `root`. Common special folder IDs:
+
+```text
+root
+uploads
+```
+
+To avoid printing temporary access URLs, folder item, asset, and design output is normalized by default and keeps stable fields such as IDs, titles/names, timestamps, and thumbnail presence.
 
 ### Export Designs
 
@@ -334,5 +369,6 @@ Useful endpoints:
 ## Current V0 Limitations
 
 - No `jobs status/resume` yet.
+- Canva-side write capabilities are not implemented yet, including creating/updating designs, uploading/deleting assets, creating comments, or modifying permissions.
 - The current open-source mode requires users to bring their own Canva.cn integration and store their own client secret locally.
 - The project does not embed or distribute a shared `client_secret`; users should protect `~/.canvapie/config.json` and `~/.canvapie/tokens.json`.

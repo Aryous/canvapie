@@ -18,7 +18,7 @@ canvapie help
 如果想固定当前版本：
 
 ```sh
-npm install -g canvapie@0.1.0
+npm install -g canvapie@0.2.0
 ```
 
 安装后按这个顺序完成首次授权：
@@ -39,6 +39,10 @@ canvapie doctor --json
 canvapie resolve "https://www.canva.cn/design/<design-id>/edit" --json
 canvapie resolve "<title-keyword>" --json
 canvapie pages <design-id> --json
+canvapie export-formats <design-id> --json
+canvapie profile get --json
+canvapie folders list root --limit 10 --json
+canvapie folders list uploads --item-types image --limit 10 --json
 canvapie export "<title-keyword>" --format pptx --pages 1 --out cli-exports --inspect --json
 canvapie inspect exports/<design-id>.pptx --json
 canvapie resolve --input refs.txt --jsonl
@@ -211,6 +215,7 @@ canvapie list --limit 25 --json
 canvapie search "<title-keyword>" --json
 canvapie get "<title-keyword>" --json
 canvapie pages <design-id> --json
+canvapie export-formats <design-id> --json
 ```
 
 资源分组形式也保留，可用于更接近 API 的脚本风格：
@@ -220,9 +225,39 @@ canvapie designs list --limit 25 --json
 canvapie designs search "<title-keyword>" --json
 canvapie designs get "<title-keyword>" --json
 canvapie designs pages <design-id> --json
+canvapie designs export-formats <design-id> --json
 ```
 
 `pages` / `designs pages` 目前读取的是 Canva Connect API 的页面 metadata。Canva API 当前不直接返回页面是否 hidden。
+
+`export-formats` / `designs export-formats` 用于查询某个具体设计当前可导出的格式。它不是新增导出格式，而是在导出前让 Agent 判断目标设计是否支持 `pptx`、`pdf`、`png` 等格式。
+
+### 读取 Profile / Folder / Asset
+
+```sh
+canvapie profile get --json
+canvapie folders get root --json
+canvapie folders list root --limit 25 --json
+canvapie folders list uploads --item-types image --limit 25 --json
+canvapie assets get <asset-id> --json
+```
+
+这些命令分别需要：
+
+```text
+profile:read
+folder:read
+asset:read
+```
+
+`folders list` 默认读取 `root`。常用特殊 folder ID：
+
+```text
+root
+uploads
+```
+
+为了避免输出临时访问 URL，folder item、asset 和 design 输出会默认归一化，只保留 ID、标题/名称、时间、缩略图是否存在等稳定字段。
 
 ### 导出设计
 
@@ -334,5 +369,6 @@ http://127.0.0.1:3001/
 ## 当前 V0 限制
 
 - 暂未实现 `jobs status/resume`。
+- 暂未实现 Canva 端写入能力，例如创建/修改设计、上传/删除素材、创建评论、修改权限等。
 - 当前开源模式要求用户自带 Canva.cn integration，并把自己的 client secret 保存在本机。
 - 项目不会内置或分发共享的 `client_secret`；用户应自行保护 `~/.canvapie/config.json` 和 `~/.canvapie/tokens.json`。
