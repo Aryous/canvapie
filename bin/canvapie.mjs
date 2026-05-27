@@ -198,11 +198,18 @@ FLAGS:
   --client-secret <sec>  Canva integration client secret
   --redirect-uri <url>   OAuth redirect URL
   --scopes <scopes>      space-separated OAuth scopes
+  --force                update existing config instead of reusing it
   --non-interactive      fail instead of prompting
   -h, --help             help for init
 
 OUTPUT:
   ~/.canvapie/config.json
+
+NOTES:
+  If ~/.canvapie/config.json already has a client ID and secret, init exits
+  without prompting. Use --force to update it.
+  Config does not expire locally; OAuth tokens expire. Check token expiry with:
+  canvapie doctor --json
 
 NEXT:
   canvapie auth login
@@ -275,6 +282,13 @@ CLI health check: config, auth, scopes, and token expiry.
 
 USAGE:
   canvapie doctor --json
+
+OUTPUT INCLUDES:
+  has_client_id, has_client_secret
+  logged_in
+  token_expires_at
+  token_expires_in_seconds
+  token_expired
 
 FLAGS:
   -h, --help  help for doctor
@@ -484,6 +498,39 @@ function firstRef(values, options) {
 
 async function initConfig(options, config) {
   const existing = readJsonIfExists(config.configPath) || {};
+  const hasExplicitInput = Boolean(
+    options.clientId ||
+      options.clientSecret ||
+      options.redirectUri ||
+      options.webBaseUrl ||
+      options.apiBaseUrl ||
+      options.scopes ||
+      process.env.CANVA_CLIENT_ID ||
+      process.env.CANVA_CLIENT_SECRET ||
+      process.env.CANVA_REDIRECT_URI ||
+      process.env.CANVA_WEB_BASE_URL ||
+      process.env.CANVA_API_BASE_URL ||
+      process.env.CANVA_SCOPES,
+  );
+  if (existing.client_id && existing.client_secret && !hasExplicitInput && !options.force) {
+    return {
+      config_exists: true,
+      config_saved: false,
+      config_path: config.configPath,
+      has_client_id: true,
+      has_client_secret: true,
+      redirect_uri: existing.redirect_uri || DEFAULT_REDIRECT_URI,
+      web_base_url: existing.web_base_url || DEFAULT_WEB_BASE_URL,
+      api_base_url: existing.api_base_url || DEFAULT_API_BASE_URL,
+      scopes: splitScopes(existing.scopes || DEFAULT_SCOPES),
+      next_steps: ["canvapie auth status --json", "canvapie doctor --json"],
+      notes: [
+        "Existing config was found, so init did not prompt or overwrite it.",
+        "Config does not expire locally; OAuth tokens expire. Use canvapie doctor --json to check token expiry.",
+        "Use canvapie init --force to update or replace the saved integration config.",
+      ],
+    };
+  }
   const values = {
     client_id: options.clientId || process.env.CANVA_CLIENT_ID || existing.client_id || config.clientId || "",
     client_secret:
@@ -514,6 +561,9 @@ async function initConfig(options, config) {
   const interactive = process.stdin.isTTY && process.stdout.isTTY && !options.nonInteractive;
   if (interactive) {
     process.stderr.write(initGuideText());
+    if (existing.client_id && existing.client_secret && options.force) {
+      process.stderr.write(`Existing config found at ${config.configPath}. --force will update it.\n\n`);
+    }
     const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
     try {
       values.client_id = await promptText(rl, "Canva client ID", values.client_id);
@@ -552,6 +602,9 @@ async function initConfig(options, config) {
     api_base_url: values.api_base_url,
     scopes: values.scopes,
     next_steps: ["canvapie auth login", "canvapie doctor --json"],
+    notes: [
+      "Config does not expire locally; OAuth tokens expire. Use canvapie doctor --json to check token expiry.",
+    ],
   };
 }
 
@@ -685,6 +738,7 @@ function parseDotEnv(filePath) {
 async function doctor(config) {
   const token = readToken(config);
   const tokenScopes = splitScopes(token?.scope || "");
+  const expiresAt = tokenExpiresAt(token);
   return {
     version: VERSION,
     environment: config.webBaseUrl.includes("canva.cn") ? "canva.cn" : "custom",
@@ -695,7 +749,9 @@ async function doctor(config) {
     has_client_id: Boolean(config.clientId),
     has_client_secret: Boolean(config.clientSecret),
     logged_in: Boolean(token?.access_token),
-    token_expires_at: tokenExpiresAt(token),
+    token_expires_at: expiresAt,
+    token_expires_in_seconds: tokenSecondsUntilExpiry(token),
+    token_expired: token ? isTokenLikelyExpired(token) : null,
     scopes: tokenScopes,
     missing_recommended_scopes: DEFAULT_SCOPES.filter((scope) => !tokenScopes.includes(scope)),
   };
@@ -706,6 +762,8 @@ async function authStatus(config) {
   return {
     logged_in: status.logged_in,
     token_expires_at: status.token_expires_at,
+    token_expires_in_seconds: status.token_expires_in_seconds,
+    token_expired: status.token_expired,
     scopes: status.scopes,
     missing_recommended_scopes: status.missing_recommended_scopes,
   };
@@ -1303,6 +1361,12 @@ function isTokenLikelyExpired(token) {
 function tokenExpiresAt(token) {
   if (!token?.obtained_at || !token.expires_in) return null;
   return new Date(new Date(token.obtained_at).getTime() + Number(token.expires_in) * 1000).toISOString();
+}
+
+function tokenSecondsUntilExpiry(token) {
+  const expiresAt = tokenExpiresAt(token);
+  if (!expiresAt) return null;
+  return Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000);
 }
 
 function openUrl(url) {

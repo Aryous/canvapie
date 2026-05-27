@@ -42,6 +42,18 @@ canvapie auth login
 ~/.canvapie/config.json
 ```
 
+如果 `~/.canvapie/config.json` 已经存在且包含 client ID / client secret，`canvapie init` 会直接复用现有配置，不会再次询问或覆盖。需要更新配置时使用：
+
+```sh
+canvapie init --force
+```
+
+配置本身没有本地过期时间；会过期的是 OAuth token。用下面命令查看 `token_expires_at`、`token_expires_in_seconds` 和 `token_expired`：
+
+```sh
+canvapie doctor --json
+```
+
 这些值来自 Canva.cn Developer Portal：
 
 1. 打开 `https://www.canva.cn/developers/integrations`
@@ -265,5 +277,5 @@ http://127.0.0.1:3001/
 
 - 暂未实现 JSONL/stdin 批处理。
 - 暂未实现 `jobs status/resume`。
-- 目前是本地/internal 模式，使用用户自己创建的 Canva.cn integration 和 client secret。
-- 如果未来公开分发，应改为后端 token broker，不能把 `client_secret` 打包进 CLI。
+- 当前开源模式要求用户自带 Canva.cn integration，并把自己的 client secret 保存在本机。
+- 项目不会内置或分发共享的 `client_secret`；用户应自行保护 `~/.canvapie/config.json` 和 `~/.canvapie/tokens.json`。

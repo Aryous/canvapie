@@ -44,7 +44,6 @@ V0 should support:
 
 Out of scope for V0:
 
-- Hosted token broker.
 - Multi-user SaaS auth.
 - Canva.com global environment parity.
 - Editing or creating Canva designs.
@@ -52,7 +51,7 @@ Out of scope for V0:
 
 ## 4. Security Model
 
-### V0: Local/Internal Mode
+### Open-Source Local Mode
 
 The user creates their own Canva.cn Connect integration and stores credentials locally.
 
@@ -65,6 +64,7 @@ Local config:
 ```
 
 The CLI must never print access tokens, refresh tokens, or client secrets.
+The project should not embed or distribute a shared `client_secret`. Each user is expected to configure their own Canva.cn integration via `canvapie init`.
 
 Recommended config commands:
 
@@ -74,19 +74,6 @@ canvapie config set client_secret ...
 canvapie config set api_base_url https://api.canva.cn/rest/v1
 canvapie config set web_base_url https://www.canva.cn
 ```
-
-### V1: Distributable Mode
-
-For public distribution, do not embed `client_secret` in the CLI.
-
-Use a backend token broker:
-
-- CLI opens local browser and receives redirect.
-- Backend performs token exchange using client secret.
-- CLI stores user token locally.
-- Backend keeps secret private.
-
-This is required if the tool is meant for general users rather than personal/internal use.
 
 ## 5. Agent-First Command Contract
 
@@ -241,6 +228,7 @@ canvapie auth logout
 
 `init` is the first-time setup command. It writes `~/.canvapie/config.json` so `auth login` can run from any working directory.
 `canvapie init --help` must explain where to get the client ID and client secret: Canva.cn Developer Portal -> Connect API integration -> Authentication. It must also show the exact redirect URL and recommended scopes. If an agent lacks those values, it should ask the user for them rather than guessing.
+If config already exists with a client ID and secret, `init` should reuse it and exit without prompting; `--force` should update or replace it. Config itself does not expire locally. OAuth tokens expire and should be checked with `doctor` fields such as `token_expires_at`, `token_expires_in_seconds`, and `token_expired`.
 
 `auth login` may be interactive because OAuth requires a browser. Everything else should be scriptable.
 
@@ -545,12 +533,12 @@ Example:
 - Keep CLI as the canonical implementation.
 - MCP should call the CLI or reuse the same library.
 
-### Phase 4: Public Distribution
+### Phase 4: Open-Source Packaging
 
-- Replace local client secret with hosted token broker.
-- Add installer.
+- Add installer or package manager distribution.
+- Keep the bring-your-own Canva.cn integration model.
+- Document local secret handling and gitignore expectations.
 - Add update mechanism.
-- Prepare review documentation and security notes.
 
 ## 13. Success Criteria
 

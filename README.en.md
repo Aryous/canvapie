@@ -42,6 +42,18 @@ canvapie auth login
 ~/.canvapie/config.json
 ```
 
+If `~/.canvapie/config.json` already exists and contains a client ID / client secret, `canvapie init` reuses it without prompting or overwriting. To update the config, run:
+
+```sh
+canvapie init --force
+```
+
+Config does not expire locally; OAuth tokens expire. Check `token_expires_at`, `token_expires_in_seconds`, and `token_expired` with:
+
+```sh
+canvapie doctor --json
+```
+
 Get these values from the Canva.cn Developer Portal:
 
 1. Open `https://www.canva.cn/developers/integrations`
@@ -265,5 +277,5 @@ Useful endpoints:
 
 - No JSONL/stdin batch mode yet.
 - No `jobs status/resume` yet.
-- Local/internal mode uses the user's own Canva.cn integration and client secret.
-- Public distribution should use a backend token broker; do not bundle `client_secret` into the CLI.
+- The current open-source mode requires users to bring their own Canva.cn integration and store their own client secret locally.
+- The project does not embed or distribute a shared `client_secret`; users should protect `~/.canvapie/config.json` and `~/.canvapie/tokens.json`.
