@@ -13,6 +13,14 @@
     "pptx",
     "agent"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aryous/canvapie.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Aryous/canvapie/issues"
+  },
+  "homepage": "https://github.com/Aryous/canvapie#readme",
   "bin": {
     "canvapie": "./bin/canvapie.mjs"
   },
