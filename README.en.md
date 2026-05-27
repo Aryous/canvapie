@@ -31,6 +31,7 @@ The CLI reads local `.env` and `.tokens.json` first. If no local `.tokens.json` 
 New users start with two commands:
 
 ```sh
+canvapie init --help
 canvapie init
 canvapie auth login
 ```
@@ -40,6 +41,25 @@ canvapie auth login
 ```text
 ~/.canvapie/config.json
 ```
+
+Get these values from the Canva.cn Developer Portal:
+
+1. Open `https://www.canva.cn/developers/integrations`
+2. Create or open a Connect API integration.
+3. Copy the client ID and client secret from Authentication.
+4. Add this redirect URL in Return navigation / redirect URLs:
+
+   ```text
+   http://127.0.0.1:3001/oauth/redirect
+   ```
+
+5. Enable these scopes:
+
+   ```text
+   design:meta:read design:content:read folder:read asset:read profile:read
+   ```
+
+If an agent does not know the client ID or client secret, it should ask the user to create/open the Canva.cn Connect API integration and provide those values. It should not guess.
 
 For agents, scripts, or CI, use non-interactive flags:
 

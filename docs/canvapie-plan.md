@@ -240,6 +240,7 @@ canvapie auth logout
 ```
 
 `init` is the first-time setup command. It writes `~/.canvapie/config.json` so `auth login` can run from any working directory.
+`canvapie init --help` must explain where to get the client ID and client secret: Canva.cn Developer Portal -> Connect API integration -> Authentication. It must also show the exact redirect URL and recommended scopes. If an agent lacks those values, it should ask the user for them rather than guessing.
 
 `auth login` may be interactive because OAuth requires a browser. Everything else should be scriptable.
 

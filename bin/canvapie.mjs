@@ -16,6 +16,9 @@ const DEFAULT_SCOPES = [
   "asset:read",
   "profile:read",
 ];
+const DEFAULT_REDIRECT_URI = "http://127.0.0.1:3001/oauth/redirect";
+const DEFAULT_WEB_BASE_URL = "https://www.canva.cn";
+const DEFAULT_API_BASE_URL = "https://api.canva.cn/rest/v1";
 const EXIT = {
   generic: 1,
   invalidArgs: 2,
@@ -47,7 +50,11 @@ async function main(argv) {
   }
 
   if (!command || command === "help" || options.help) {
-    printHelp(command === "help" ? subcommand : command);
+    const helpTopic =
+      command === "help"
+        ? [subcommand, ...rest].filter(Boolean).join(" ")
+        : [command, subcommand].filter(Boolean).join(" ");
+    printHelp(helpTopic);
     return;
   }
 
@@ -166,81 +173,184 @@ function printHelp(topic) {
   const topics = {
     init: `canvapie ${VERSION}
 
-Initialize Canva integration config:
+Initialize Canva integration config.
+
+USAGE:
   canvapie init
   canvapie init --client-id <id> --client-secret <secret>
 
-Saved config:
+WHERE TO GET VALUES:
+  1. Open Canva.cn Developer Portal:
+     https://www.canva.cn/developers/integrations
+  2. Create or open a Connect API integration.
+  3. In Authentication, copy the client ID and client secret.
+  4. In Return navigation / redirect URLs, add exactly:
+     ${DEFAULT_REDIRECT_URI}
+  5. In Scopes, enable:
+     ${DEFAULT_SCOPES.join(" ")}
+
+AGENT NOTES:
+  If client ID or secret is unavailable, ask the user to create/open the
+  Canva.cn Connect API integration and provide those values. Do not guess.
+
+FLAGS:
+  --client-id <id>       Canva integration client ID
+  --client-secret <sec>  Canva integration client secret
+  --redirect-uri <url>   OAuth redirect URL
+  --scopes <scopes>      space-separated OAuth scopes
+  --non-interactive      fail instead of prompting
+  -h, --help             help for init
+
+OUTPUT:
   ~/.canvapie/config.json
 
-Next:
+NEXT:
   canvapie auth login
   canvapie doctor --json
 `,
     auth: `canvapie ${VERSION}
 
-Auth commands:
-  canvapie auth login
-  canvapie auth status --json
-  canvapie auth logout
+OAuth credentials and authorization management.
 
-First-time flow:
+USAGE:
+  canvapie auth <command> [options]
+
+AVAILABLE COMMANDS:
+  login      Open browser and complete Canva OAuth login
+  status     View current auth status
+  logout     Clear saved token
+
+EXAMPLES:
   canvapie init
   canvapie auth login
   canvapie doctor --json
+
+If auth login reports missing_config, run:
+  canvapie init --help
+
+FLAGS:
+  -h, --help  help for auth
+
+Use "canvapie auth <command> --help" for more information about a command.
+`,
+    "auth login": `canvapie ${VERSION}
+
+Open browser and complete Canva OAuth login.
+
+USAGE:
+  canvapie auth login [flags]
+
+FLAGS:
+  --no-open        print authorization URL instead of opening a browser
+  --timeout <ms>   OAuth callback timeout in milliseconds
+  --scopes <list>  override configured OAuth scopes
+  -h, --help       help for auth login
+
+OUTPUT:
+  ~/.canvapie/tokens.json
+`,
+    "auth status": `canvapie ${VERSION}
+
+View current auth status.
+
+USAGE:
+  canvapie auth status --json
+
+FLAGS:
+  -h, --help  help for auth status
+`,
+    "auth logout": `canvapie ${VERSION}
+
+Clear saved OAuth token.
+
+USAGE:
+  canvapie auth logout
+
+FLAGS:
+  -h, --help  help for auth logout
 `,
     doctor: `canvapie ${VERSION}
 
-Check local setup and auth status:
+CLI health check: config, auth, scopes, and token expiry.
+
+USAGE:
   canvapie doctor --json
 
-Use this before export when an agent needs to verify config, login state, scopes, and token expiry.
+FLAGS:
+  -h, --help  help for doctor
 `,
     resolve: `canvapie ${VERSION}
 
-Resolve a Canva design reference:
+Resolve a Canva design reference.
+
+USAGE:
   canvapie resolve <design-ref> --json
 
-Design reference examples:
+DESIGN REFERENCES:
   <design-id>
   https://www.canva.cn/design/<design-id>/edit
   <title-keyword>
+
+FLAGS:
+  --ref <design-ref>  pass reference as a flag
+  -h, --help          help for resolve
 `,
     export: `canvapie ${VERSION}
 
-Export a Canva design:
+Export a Canva design.
+
+USAGE:
   canvapie export <design-ref> --format pptx --out ./exports --inspect --json
 
-Default output:
+DEFAULT OUTPUT:
   ./exports/<design_id>/
 
-Options:
-  --format <pptx|pdf|png|jpg|gif|mp4|csv|html_bundle|html_standalone>
-  --pages <1,2,3>
-  --out <directory>
-  --inspect
+FLAGS:
+  --format <fmt>      pptx | pdf | png | jpg | gif | mp4 | csv | html_bundle | html_standalone
+  --pages <1,2,3>     export selected pages
+  --out <directory>   output directory (default: ./exports)
+  --inspect           inspect PPTX slide visibility after export
+  --ref <design-ref>  pass reference as a flag
+  -h, --help          help for export
 `,
     read: `canvapie ${VERSION}
 
-Read Canva design metadata:
+Read Canva design metadata.
+
+USAGE:
   canvapie list --limit 25 --json
   canvapie search <query> --json
   canvapie get <design-ref> --json
   canvapie read <design-ref> --json
   canvapie pages <design-ref> --json
 
-Design references may be an ID, Canva.cn design URL, temporary edit/view URL, or title keyword.
+RESOURCE-STYLE ALIASES:
+  canvapie designs list --limit 25 --json
+  canvapie designs search <query> --json
+  canvapie designs get <design-ref> --json
+  canvapie designs pages <design-ref> --json
+
+FLAGS:
+  --limit <N>  max designs to list
+  --all        paginate all list results
+  -h, --help   help for read commands
 `,
     inspect: `canvapie ${VERSION}
 
-Inspect an exported PPTX:
+Inspect an exported PPTX.
+
+USAGE:
   canvapie inspect <file.pptx> --json
   canvapie ppt inspect <file.pptx> --json
 
-Returns slide totals and hidden slide indexes.
+OUTPUT:
+  slide totals, visible count, hidden count, and hidden slide indexes
+
+FLAGS:
+  -h, --help  help for inspect
 `,
   };
-  const normalizedTopic = topic === "get" || topic === "list" || topic === "pages" || topic === "search" ? "read" : topic;
+  const normalizedTopic = normalizeHelpTopic(topic);
   if (topics[normalizedTopic]) {
     process.stdout.write(topics[normalizedTopic]);
     return;
@@ -250,44 +360,73 @@ Returns slide totals and hidden slide indexes.
 
 Agent-first Canva.cn Connect API CLI.
 
-Agent quick path:
+USAGE:
+  canvapie <command> [subcommand] [options]
+  canvapie export <design-ref> [--format pptx] [--out <dir>] [--inspect]
+  canvapie resolve <design-ref> --json
+
+EXAMPLES:
+  # First-time setup
+  canvapie init
+  canvapie auth login
+
+  # Export a design
+  canvapie export "<design-ref>" --format pptx --out ./exports --inspect --json
+
+  # Inspect exported PPTX hidden slides
+  canvapie inspect ./exports/<design_id>/<design_id>.pptx --json
+
+DESIGN REFERENCES:
+  <design-id>
+  https://www.canva.cn/design/<design-id>/edit
+  <title-keyword>
+
+FLAGS:
+  --json            machine-readable JSON output
+  -h, --help        help for canvapie
+  -v, --version     version for canvapie
+
+AGENT WORKFLOW:
   1. canvapie doctor --json
   2. If config is missing: canvapie init
   3. If not logged in: canvapie auth login
   4. canvapie export "<design-ref>" --format pptx --out ./exports --inspect --json
 
-Design references:
-  - Design ID: <design-id>
-  - Canva.cn URL: https://www.canva.cn/design/<design-id>/edit
-  - Title keyword: <title-keyword>
-
-Default export output:
+DEFAULT EXPORT OUTPUT:
   ./exports/<design_id>/
 
-Commands:
-  canvapie help [command]
-  canvapie init
-  canvapie doctor --json
-  canvapie auth login
-  canvapie auth status --json
-  canvapie auth logout
-  canvapie resolve <design-ref> --json
-  canvapie list --limit 25 --json
-  canvapie search <query> --json
-  canvapie get <design-ref> --json
-  canvapie pages <design-ref> --json
-  canvapie export <design-ref> --format pptx --out ./exports --inspect --json
-  canvapie inspect <file.pptx> --json
+Usage:
+  canvapie [command]
 
-Resource-style aliases:
-  canvapie designs list|get|pages|search ...
-  canvapie ppt inspect <file.pptx>
+Available Commands:
+  auth       OAuth credentials and authorization management
+  doctor     CLI health check: config, auth, scopes, and token expiry
+  export     Export a Canva design
+  get        Read one design's metadata
+  help       Help about any command
+  init       Initialize Canva integration config
+  inspect    Inspect an exported PPTX
+  list       List accessible designs
+  pages      List pages in a design
+  read       Alias for get
+  resolve    Resolve a Canva design reference
+  search     Search designs by title keyword
 
-Flags:
-  -h, --help
-  -v, --version
+Advanced Resource Aliases:
+  designs    Design metadata commands: list, search, get, pages
+  ppt        PPTX commands: inspect
+
+Use "canvapie <command> --help" for more information about a command.
 `;
   process.stdout.write(text);
+}
+
+function normalizeHelpTopic(topic = "") {
+  const normalized = String(topic).trim();
+  if (["get", "list", "pages", "read", "search", "designs"].includes(normalized)) return "read";
+  if (normalized.startsWith("designs ")) return "read";
+  if (normalized === "ppt" || normalized === "ppt inspect") return "inspect";
+  return normalized;
 }
 
 function parseArgs(argv) {
@@ -354,15 +493,15 @@ async function initConfig(options, config) {
       process.env.CANVA_REDIRECT_URI ||
       existing.redirect_uri ||
       config.redirectUri ||
-      "http://127.0.0.1:3001/oauth/redirect",
+      DEFAULT_REDIRECT_URI,
     web_base_url:
-      options.webBaseUrl || process.env.CANVA_WEB_BASE_URL || existing.web_base_url || config.webBaseUrl || "https://www.canva.cn",
+      options.webBaseUrl || process.env.CANVA_WEB_BASE_URL || existing.web_base_url || config.webBaseUrl || DEFAULT_WEB_BASE_URL,
     api_base_url:
       options.apiBaseUrl ||
       process.env.CANVA_API_BASE_URL ||
       existing.api_base_url ||
       config.apiBaseUrl ||
-      "https://api.canva.cn/rest/v1",
+      DEFAULT_API_BASE_URL,
     scopes: splitScopes(
       options.scopes ||
         process.env.CANVA_SCOPES ||
@@ -374,7 +513,8 @@ async function initConfig(options, config) {
 
   const interactive = process.stdin.isTTY && process.stdout.isTTY && !options.nonInteractive;
   if (interactive) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    process.stderr.write(initGuideText());
+    const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
     try {
       values.client_id = await promptText(rl, "Canva client ID", values.client_id);
       values.client_secret = await promptSecret(rl, "Canva client secret", values.client_secret);
@@ -394,7 +534,7 @@ async function initConfig(options, config) {
       EXIT.invalidArgs,
       {
         remediation:
-          "Run canvapie init, or run canvapie init --client-id <id> --client-secret <secret>, then run canvapie auth login.",
+          "Run canvapie init --help to see where to get credentials, then run canvapie init and canvapie auth login.",
       },
     );
   }
@@ -413,6 +553,24 @@ async function initConfig(options, config) {
     scopes: values.scopes,
     next_steps: ["canvapie auth login", "canvapie doctor --json"],
   };
+}
+
+function initGuideText() {
+  return `Before continuing, create or open your Canva.cn Connect API integration.
+
+Where to get values:
+  1. Open https://www.canva.cn/developers/integrations
+  2. Create or open a Connect API integration.
+  3. Copy client ID and client secret from Authentication.
+  4. Add this redirect URL in Return navigation / redirect URLs:
+     ${DEFAULT_REDIRECT_URI}
+  5. Enable scopes:
+     ${DEFAULT_SCOPES.join(" ")}
+
+Press Enter to keep an existing/default value.
+The client secret input is hidden.
+
+`;
 }
 
 async function promptText(rl, label, defaultValue = "") {
@@ -480,14 +638,14 @@ function loadConfig(options = {}) {
       process.env.CANVA_REDIRECT_URI ||
       fileConfig.redirect_uri ||
       cwdEnv.CANVA_REDIRECT_URI ||
-      "http://127.0.0.1:3001/oauth/redirect",
+      DEFAULT_REDIRECT_URI,
     webBaseUrl:
       trimTrailingSlash(
         options.webBaseUrl ||
           process.env.CANVA_WEB_BASE_URL ||
           fileConfig.web_base_url ||
           cwdEnv.CANVA_WEB_BASE_URL ||
-          "https://www.canva.cn",
+          DEFAULT_WEB_BASE_URL,
       ),
     apiBaseUrl:
       trimTrailingSlash(
@@ -495,7 +653,7 @@ function loadConfig(options = {}) {
           process.env.CANVA_API_BASE_URL ||
           fileConfig.api_base_url ||
           cwdEnv.CANVA_API_BASE_URL ||
-          "https://api.canva.cn/rest/v1",
+          DEFAULT_API_BASE_URL,
       ),
     scopes: splitScopes(
       options.scopes ||
@@ -1118,7 +1276,7 @@ function requireConfig(config) {
   if (!config.clientId || !config.clientSecret) {
     throw userError("missing_config", "Missing Canva client_id or client_secret.", EXIT.invalidArgs, {
       remediation:
-        "Run canvapie init, or run canvapie init --client-id <id> --client-secret <secret>, then run canvapie auth login.",
+        "Run canvapie init --help to see where to get credentials, then run canvapie init and canvapie auth login.",
     });
   }
 }
