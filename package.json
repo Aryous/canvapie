@@ -22,7 +22,7 @@
   },
   "homepage": "https://github.com/Aryous/canvapie#readme",
   "bin": {
-    "canvapie": "./bin/canvapie.mjs"
+    "canvapie": "bin/canvapie.mjs"
   },
   "files": [
     "bin/",
