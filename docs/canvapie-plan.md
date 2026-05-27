@@ -314,9 +314,11 @@ canvapie jobs resume <job-id> --json
 ```sh
 canvapie inspect ./exports/<design-id>/<design-id>.pptx --json
 canvapie ppt inspect ./exports/<design-id>/<design-id>.pptx --json
+canvapie remove-hidden ./exports/<design-id>/<design-id>.pptx --out ./exports/<design-id>/<design-id>.visible.pptx --json
+canvapie ppt remove-hidden ./exports/<design-id>/<design-id>.pptx --out ./exports/<design-id>/<design-id>.visible.pptx --json
 ```
 
-The CLI should parse the PPTX zip and inspect:
+The CLI should parse the PPTX zip, inspect hidden-slide state, and optionally write a new PPTX with hidden slides removed:
 
 ```text
 ppt/slides/slideN.xml
@@ -360,7 +362,7 @@ Expected output:
 
 ## 8. Pipeline Automation
 
-The CLI should support stdin and JSONL for batch workflows.
+The CLI supports stdin/file input and JSONL output for batch workflows.
 
 Examples:
 
@@ -388,7 +390,7 @@ or already resolved:
 {"design_id":"<design-id>","title":"<title-keyword>"}
 ```
 
-Each output line should be independently successful or failed. One bad design should not abort the whole batch unless `--fail-fast` is passed.
+Each output line is independently successful or failed. One bad design does not abort the whole batch. If any item fails, the process exits with code `10`.
 
 ## 9. Exit Codes
 
@@ -511,12 +513,11 @@ Example:
 - Implement `designs list/get/pages/search`.
 - Implement `export`.
 - Implement `ppt inspect`.
+- Implement `ppt remove-hidden`.
 - Add JSON output contracts and exit codes.
 
 ### Phase 2: Pipeline Hardening
 
-- Add stdin/file input.
-- Add JSONL output.
 - Add `--fail-fast`, `--retry`, `--timeout`.
 - Add job resume.
 - Add artifact manifests and hashes.

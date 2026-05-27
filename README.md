@@ -18,6 +18,8 @@ canvapie resolve "<title-keyword>" --json
 canvapie pages <design-id> --json
 canvapie export "<title-keyword>" --format pptx --pages 1 --out cli-exports --inspect --json
 canvapie inspect exports/<design-id>.pptx --json
+canvapie resolve --input refs.txt --jsonl
+canvapie export --input designs.jsonl --format pptx --inspect --jsonl
 ```
 
 CLI 会优先读取当前目录下的 `.env` 和 `.tokens.json`。如果当前目录没有 `.tokens.json`，会回退到：
@@ -167,6 +169,8 @@ canvapie auth logout
 
 ```sh
 canvapie resolve "<design-ref>" --json
+canvapie resolve --stdin --jsonl
+canvapie resolve --input refs.txt --jsonl
 ```
 
 `design-ref` 可以是：
@@ -200,6 +204,8 @@ canvapie designs pages <design-id> --json
 
 ```sh
 canvapie export "<title-keyword>" --format pptx --out cli-exports --inspect --json
+canvapie export --stdin --format pptx --out cli-exports --inspect --jsonl
+canvapie export --input designs.jsonl --format pptx --out cli-exports --inspect --jsonl
 ```
 
 导出会创建 Canva export job，轮询直到成功，然后下载文件到：
@@ -215,13 +221,41 @@ manifest.json
 slides.json
 ```
 
+### 批处理
+
+批处理支持纯文本、JSONL 和 JSON 数组。纯文本每行一个设计引用：
+
+```text
+https://www.canva.cn/design/<design-id>/edit
+<title-keyword>
+```
+
+JSONL 每行可以是：
+
+```json
+{"ref":"https://www.canva.cn/design/<design-id>/edit"}
+{"design_id":"<design-id>"}
+{"title":"<title-keyword>"}
+```
+
+也可以直接串联 `resolve` 到 `export`：
+
+```sh
+canvapie resolve --input refs.txt --jsonl \
+  | canvapie export --stdin --format pptx --out cli-exports --inspect --jsonl
+```
+
+批处理会逐行输出 JSONL；单条失败不会中断后续输入。如果有任意失败，进程退出码为 `10`。
+
 ### 检查 PPTX 隐藏页
 
 ```sh
 canvapie inspect cli-exports/<design-id>/<design-id>.pptx --json
+canvapie remove-hidden cli-exports/<design-id>/<design-id>.pptx --out cli-exports/<design-id>/<design-id>.visible.pptx --json
 ```
 
 `canvapie ppt inspect <file.pptx>` 也保留为兼容别名。
+`canvapie ppt remove-hidden <file.pptx>` 也保留为兼容别名。
 
 PPTX 隐藏页标记位于：
 
@@ -235,7 +269,7 @@ ppt/slides/slideN.xml
 <p:sld show="false" ...>
 ```
 
-CLI 会输出总页数、可见页数、隐藏页数和隐藏页索引。
+CLI 会输出总页数、可见页数、隐藏页数和隐藏页索引。`remove-hidden` 会生成一份新的 PPTX，删除隐藏页，并保留原文件不变。
 
 ## 本地 OAuth 调试服务
 
@@ -275,7 +309,6 @@ http://127.0.0.1:3001/
 
 ## 当前 V0 限制
 
-- 暂未实现 JSONL/stdin 批处理。
 - 暂未实现 `jobs status/resume`。
 - 当前开源模式要求用户自带 Canva.cn integration，并把自己的 client secret 保存在本机。
 - 项目不会内置或分发共享的 `client_secret`；用户应自行保护 `~/.canvapie/config.json` 和 `~/.canvapie/tokens.json`。

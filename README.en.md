@@ -18,6 +18,8 @@ canvapie resolve "<title-keyword>" --json
 canvapie pages <design-id> --json
 canvapie export "<title-keyword>" --format pptx --pages 1 --out cli-exports --inspect --json
 canvapie inspect exports/<design-id>.pptx --json
+canvapie resolve --input refs.txt --jsonl
+canvapie export --input designs.jsonl --format pptx --inspect --jsonl
 ```
 
 The CLI reads local `.env` and `.tokens.json` first. If no local `.tokens.json` exists, it falls back to:
@@ -167,6 +169,8 @@ canvapie auth logout
 
 ```sh
 canvapie resolve "<design-ref>" --json
+canvapie resolve --stdin --jsonl
+canvapie resolve --input refs.txt --jsonl
 ```
 
 `design-ref` can be:
@@ -200,6 +204,8 @@ canvapie designs pages <design-id> --json
 
 ```sh
 canvapie export "<title-keyword>" --format pptx --out cli-exports --inspect --json
+canvapie export --stdin --format pptx --out cli-exports --inspect --jsonl
+canvapie export --input designs.jsonl --format pptx --out cli-exports --inspect --jsonl
 ```
 
 The CLI creates a Canva export job, polls it until success, then downloads files to:
@@ -215,13 +221,41 @@ manifest.json
 slides.json
 ```
 
+### Batch Workflows
+
+Batch input supports plain text, JSONL, and JSON arrays. Plain text uses one design reference per line:
+
+```text
+https://www.canva.cn/design/<design-id>/edit
+<title-keyword>
+```
+
+JSONL can use any of these forms:
+
+```json
+{"ref":"https://www.canva.cn/design/<design-id>/edit"}
+{"design_id":"<design-id>"}
+{"title":"<title-keyword>"}
+```
+
+You can pipe `resolve` into `export`:
+
+```sh
+canvapie resolve --input refs.txt --jsonl \
+  | canvapie export --stdin --format pptx --out cli-exports --inspect --jsonl
+```
+
+Batch commands write one JSON envelope per line. One failed item does not stop later items. If any item fails, the process exits with code `10`.
+
 ### Inspect PPTX Hidden Slides
 
 ```sh
 canvapie inspect cli-exports/<design-id>/<design-id>.pptx --json
+canvapie remove-hidden cli-exports/<design-id>/<design-id>.pptx --out cli-exports/<design-id>/<design-id>.visible.pptx --json
 ```
 
 `canvapie ppt inspect <file.pptx>` is kept as a compatibility alias.
+`canvapie ppt remove-hidden <file.pptx>` is kept as a compatibility alias.
 
 PPTX hidden-slide state is stored in:
 
@@ -235,7 +269,7 @@ For example:
 <p:sld show="false" ...>
 ```
 
-The CLI returns total, visible, hidden slide counts, and hidden slide indexes.
+The CLI returns total, visible, hidden slide counts, and hidden slide indexes. `remove-hidden` writes a new PPTX without hidden slides and leaves the original file unchanged.
 
 ## Local OAuth Debug Service
 
@@ -275,7 +309,6 @@ Useful endpoints:
 
 ## Current V0 Limitations
 
-- No JSONL/stdin batch mode yet.
 - No `jobs status/resume` yet.
 - The current open-source mode requires users to bring their own Canva.cn integration and store their own client secret locally.
 - The project does not embed or distribute a shared `client_secret`; users should protect `~/.canvapie/config.json` and `~/.canvapie/tokens.json`.

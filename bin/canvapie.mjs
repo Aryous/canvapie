@@ -31,7 +31,18 @@ const EXIT = {
   timeout: 9,
   partialBatchFailure: 10,
 };
-const BOOLEAN_OPTIONS = new Set(["all", "force", "help", "inspect", "json", "noOpen", "nonInteractive", "version"]);
+const BOOLEAN_OPTIONS = new Set([
+  "all",
+  "force",
+  "help",
+  "inspect",
+  "json",
+  "jsonl",
+  "noOpen",
+  "nonInteractive",
+  "stdin",
+  "version",
+]);
 
 main(process.argv.slice(2)).catch((error) => {
   const normalized = normalizeError(error);
@@ -71,6 +82,13 @@ async function main(argv) {
   }
 
   if (command === "resolve") {
+    if (isBatchMode(options)) {
+      return runBatchCommand("resolve", options, async (item) => ({
+        batch_index: item.index,
+        input_ref: item.ref,
+        ...(await resolveDesignRef(item.ref, config)),
+      }));
+    }
     const ref = firstRef([subcommand, ...rest].filter(Boolean), options);
     return writeJson(envelope("resolve", await resolveDesignRef(ref, config)));
   }
@@ -96,6 +114,14 @@ async function main(argv) {
   }
 
   if (command === "export") {
+    if (isBatchMode(options)) {
+      requireScope(config, "design:content:read");
+      return runBatchCommand("export", options, async (item) => ({
+        batch_index: item.index,
+        input_ref: item.ref,
+        ...(await exportCommand(item.ref, options, config)),
+      }));
+    }
     const ref = firstRef([subcommand, ...rest].filter(Boolean), options);
     const result = await exportCommand(ref, options, config);
     return writeJson(envelope("export", result, result.artifacts || []));
@@ -107,6 +133,10 @@ async function main(argv) {
 
   if (command === "inspect") {
     return handlePpt("inspect", [subcommand, ...rest].filter(Boolean), options);
+  }
+
+  if (command === "remove-hidden") {
+    return handlePpt("remove-hidden", [subcommand, ...rest].filter(Boolean), options);
   }
 
   throw userError("invalid_arguments", `Unknown command: ${command}`, EXIT.invalidArgs);
@@ -160,13 +190,19 @@ async function handleDesigns(subcommand, rest, options, config) {
 }
 
 async function handlePpt(subcommand, rest, options) {
-  if (subcommand !== "inspect") {
-    throw userError("invalid_arguments", "Expected ppt subcommand: inspect.", EXIT.invalidArgs);
+  if (subcommand === "inspect") {
+    const file = firstRef(rest, options);
+    const result = inspectPptx(file);
+    return writeJson(envelope("ppt inspect", result));
   }
 
-  const file = firstRef(rest, options);
-  const result = inspectPptx(file);
-  return writeJson(envelope("ppt inspect", result));
+  if (subcommand === "remove-hidden") {
+    const file = firstRef(rest, options);
+    const result = removeHiddenSlides(file, options);
+    return writeJson(envelope("ppt remove-hidden", result, result.artifacts || []));
+  }
+
+  throw userError("invalid_arguments", "Expected ppt subcommand: inspect or remove-hidden.", EXIT.invalidArgs);
 }
 
 function printHelp(topic) {
@@ -299,6 +335,8 @@ Resolve a Canva design reference.
 
 USAGE:
   canvapie resolve <design-ref> --json
+  canvapie resolve --stdin --jsonl
+  canvapie resolve --input refs.txt --jsonl
 
 DESIGN REFERENCES:
   <design-id>
@@ -307,6 +345,9 @@ DESIGN REFERENCES:
 
 FLAGS:
   --ref <design-ref>  pass reference as a flag
+  --stdin             read one reference or JSON object per stdin line
+  --input <path>      read references from a text, JSON, or JSONL file
+  --jsonl             write one JSON envelope per input line
   -h, --help          help for resolve
 `,
     export: `canvapie ${VERSION}
@@ -315,6 +356,8 @@ Export a Canva design.
 
 USAGE:
   canvapie export <design-ref> --format pptx --out ./exports --inspect --json
+  canvapie export --stdin --format pptx --inspect --jsonl
+  canvapie export --input designs.jsonl --format pptx --inspect --jsonl
 
 DEFAULT OUTPUT:
   ./exports/<design_id>/
@@ -325,6 +368,9 @@ FLAGS:
   --out <directory>   output directory (default: ./exports)
   --inspect           inspect PPTX slide visibility after export
   --ref <design-ref>  pass reference as a flag
+  --stdin             read one reference or JSON object per stdin line
+  --input <path>      read references from a text, JSON, or JSONL file
+  --jsonl             write one JSON envelope per input line
   -h, --help          help for export
 `,
     read: `canvapie ${VERSION}
@@ -356,6 +402,8 @@ Inspect an exported PPTX.
 USAGE:
   canvapie inspect <file.pptx> --json
   canvapie ppt inspect <file.pptx> --json
+  canvapie remove-hidden <file.pptx> --out <file.pptx> --json
+  canvapie ppt remove-hidden <file.pptx> --out <file.pptx> --json
 
 OUTPUT:
   slide totals, visible count, hidden count, and hidden slide indexes
@@ -386,6 +434,10 @@ EXAMPLES:
 
   # Export a design
   canvapie export "<design-ref>" --format pptx --out ./exports --inspect --json
+
+  # Batch export
+  canvapie resolve --input refs.txt --jsonl
+  canvapie export --input designs.jsonl --format pptx --inspect --jsonl
 
   # Inspect exported PPTX hidden slides
   canvapie inspect ./exports/<design_id>/<design_id>.pptx --json
@@ -423,6 +475,8 @@ Available Commands:
   list       List accessible designs
   pages      List pages in a design
   read       Alias for get
+  remove-hidden
+             Remove hidden slides from an exported PPTX
   resolve    Resolve a Canva design reference
   search     Search designs by title keyword
 
@@ -439,7 +493,9 @@ function normalizeHelpTopic(topic = "") {
   const normalized = String(topic).trim();
   if (["get", "list", "pages", "read", "search", "designs"].includes(normalized)) return "read";
   if (normalized.startsWith("designs ")) return "read";
+  if (normalized === "remove-hidden") return "inspect";
   if (normalized === "ppt" || normalized === "ppt inspect") return "inspect";
+  if (normalized === "ppt remove-hidden") return "inspect";
   return normalized;
 }
 
@@ -494,6 +550,149 @@ function firstRef(values, options) {
     throw userError("invalid_arguments", "Missing design reference.", EXIT.invalidArgs);
   }
   return ref;
+}
+
+function isBatchMode(options) {
+  return Boolean(options.stdin || options.input);
+}
+
+async function runBatchCommand(command, options, handler) {
+  const items = readBatchItems(options);
+  if (!items.length) {
+    throw userError("invalid_arguments", "Batch input did not contain any references.", EXIT.invalidArgs);
+  }
+
+  let failures = 0;
+  for (const item of items) {
+    if (item.error) {
+      failures += 1;
+      writeJsonLine(batchErrorEnvelope(command, item.error, item));
+      continue;
+    }
+
+    try {
+      const result = await handler(item);
+      writeJsonLine(envelope(command, result, result.artifacts || []));
+    } catch (error) {
+      failures += 1;
+      writeJsonLine(batchErrorEnvelope(command, error, item));
+    }
+  }
+
+  if (failures) {
+    process.exitCode = EXIT.partialBatchFailure;
+  }
+}
+
+function readBatchItems(options) {
+  if (options.stdin && options.input) {
+    throw userError("invalid_arguments", "Use either --stdin or --input, not both.", EXIT.invalidArgs);
+  }
+  const source = options.stdin ? "stdin" : path.resolve(String(options.input));
+  const text = options.stdin ? fs.readFileSync(0, "utf8") : fs.readFileSync(source, "utf8");
+  return parseBatchText(text, source);
+}
+
+function parseBatchText(text, source) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!Array.isArray(parsed)) {
+        throw userError("invalid_batch_input", "Batch JSON input must be an array.", EXIT.invalidArgs);
+      }
+      return parsed.map((value, index) => makeBatchItem(value, index + 1, source));
+    } catch (error) {
+      return [batchParseErrorItem(1, source, error)];
+    }
+  }
+
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: line.trim(), index: index + 1 }))
+    .filter(({ line }) => line && !line.startsWith("#"))
+    .map(({ line, index }) => {
+      if (line.startsWith("{")) {
+        try {
+          return makeBatchItem(JSON.parse(line), index, source);
+        } catch (error) {
+          return batchParseErrorItem(index, source, error, line);
+        }
+      }
+      return makeBatchItem(line, index, source);
+    });
+}
+
+function makeBatchItem(value, index, source) {
+  try {
+    const ref = extractBatchRef(value);
+    return { index, source, ref: String(ref), raw: value };
+  } catch (error) {
+    return { index, source, ref: null, raw: value, error };
+  }
+}
+
+function batchParseErrorItem(index, source, error, raw = null) {
+  return {
+    index,
+    source,
+    ref: null,
+    raw,
+    error: userError("invalid_batch_input", error.message || String(error), EXIT.invalidArgs),
+  };
+}
+
+function extractBatchRef(value) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  if (!value || typeof value !== "object") {
+    throw userError("invalid_batch_input", "Batch item must be a string or JSON object.", EXIT.invalidArgs);
+  }
+
+  if (value.ok === false && value.error) {
+    throw userError(
+      "upstream_batch_error",
+      value.error.message || "Upstream batch item failed.",
+      EXIT.invalidArgs,
+      { upstream_error: value.error },
+    );
+  }
+  if (value.result) return extractBatchRef(value.result);
+  if (value.resolved) return extractBatchRef(value.resolved);
+  if (value.design_id) return value.design_id;
+  if (value.designId) return value.designId;
+  if (value.id) return value.id;
+  if (value.ref) return value.ref;
+  if (value.design_ref) return value.design_ref;
+  if (value.designRef) return value.designRef;
+  if (value.input_ref) return value.input_ref;
+  if (value.url) return value.url;
+  if (value.title) return value.title;
+  if (value.design?.id) return value.design.id;
+  if (value.design?.title) return value.design.title;
+
+  throw userError(
+    "invalid_batch_input",
+    "JSON batch item must include ref, design_id, designId, input_ref, url, title, result, resolved, or design.",
+    EXIT.invalidArgs,
+  );
+}
+
+function batchErrorEnvelope(command, error, item) {
+  const normalized = normalizeError(error).body;
+  return {
+    ...normalized,
+    command,
+    batch_index: item.index,
+    input_ref: item.ref,
+    source: item.source,
+  };
 }
 
 async function initConfig(options, config) {
@@ -1231,8 +1430,106 @@ function inspectPptx(filePath) {
   };
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 1024 * 1024 * 100 });
+function removeHiddenSlides(filePath, options = {}) {
+  const absPath = path.resolve(filePath);
+  const before = inspectPptx(absPath);
+  const hiddenIndexes = before.hidden_indexes || [];
+  const outPath = path.resolve(
+    options.out || path.join(path.dirname(absPath), `${path.basename(absPath, path.extname(absPath))}.visible.pptx`),
+  );
+  if (outPath === absPath) {
+    throw userError("invalid_arguments", "Output path must be different from input PPTX path.", EXIT.invalidArgs);
+  }
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+
+  if (!hiddenIndexes.length) {
+    fs.copyFileSync(absPath, outPath);
+    const copiedInspection = inspectPptx(outPath);
+    return {
+      source: absPath,
+      output: outPath,
+      removed_slide_indexes: [],
+      before: before.summary,
+      after: copiedInspection.summary,
+      artifacts: [{ type: "pptx", path: outPath, sha256: sha256File(outPath) }],
+    };
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "canvapie-pptx-"));
+  try {
+    run("unzip", ["-q", absPath, "-d", tmpDir]);
+    removeHiddenSlidesFromUnzippedPptx(tmpDir, hiddenIndexes);
+    fs.rmSync(outPath, { force: true });
+    run("zip", ["-qr", outPath, "."], { cwd: tmpDir });
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  const after = inspectPptx(outPath);
+  return {
+    source: absPath,
+    output: outPath,
+    removed_slide_indexes: hiddenIndexes,
+    before: before.summary,
+    after: after.summary,
+    artifacts: [{ type: "pptx", path: outPath, sha256: sha256File(outPath) }],
+  };
+}
+
+function removeHiddenSlidesFromUnzippedPptx(rootDir, hiddenIndexes) {
+  const hiddenSlidePaths = new Set(hiddenIndexes.map((index) => `ppt/slides/slide${index}.xml`));
+  const hiddenRelPaths = new Set(hiddenIndexes.map((index) => `ppt/slides/_rels/slide${index}.xml.rels`));
+  const presentationPath = path.join(rootDir, "ppt/presentation.xml");
+  const presentationRelsPath = path.join(rootDir, "ppt/_rels/presentation.xml.rels");
+  const contentTypesPath = path.join(rootDir, "[Content_Types].xml");
+
+  const presentationRelsXml = fs.readFileSync(presentationRelsPath, "utf8");
+  const hiddenRelIds = new Set();
+  const nextPresentationRelsXml = presentationRelsXml.replace(/<Relationship\b[^>]*\/>/g, (tag) => {
+    const id = xmlAttr(tag, "Id");
+    const target = normalizePptxTarget("ppt", xmlAttr(tag, "Target"));
+    if (id && hiddenSlidePaths.has(target)) {
+      hiddenRelIds.add(id);
+      return "";
+    }
+    return tag;
+  });
+  fs.writeFileSync(presentationRelsPath, nextPresentationRelsXml);
+
+  const presentationXml = fs.readFileSync(presentationPath, "utf8");
+  const nextPresentationXml = presentationXml.replace(/<[\w:]*sldId\b[^>]*\/>/g, (tag) => {
+    const relationshipId = xmlAttr(tag, "r:id");
+    return relationshipId && hiddenRelIds.has(relationshipId) ? "" : tag;
+  });
+  fs.writeFileSync(presentationPath, nextPresentationXml);
+
+  const contentTypesXml = fs.readFileSync(contentTypesPath, "utf8");
+  const nextContentTypesXml = contentTypesXml.replace(/<Override\b[^>]*\/>/g, (tag) => {
+    const partName = (xmlAttr(tag, "PartName") || "").replace(/^\//, "");
+    return hiddenSlidePaths.has(partName) ? "" : tag;
+  });
+  fs.writeFileSync(contentTypesPath, nextContentTypesXml);
+
+  for (const slidePath of hiddenSlidePaths) {
+    fs.rmSync(path.join(rootDir, slidePath), { force: true });
+  }
+  for (const relPath of hiddenRelPaths) {
+    fs.rmSync(path.join(rootDir, relPath), { force: true });
+  }
+}
+
+function normalizePptxTarget(baseDir, target) {
+  if (!target) return "";
+  if (target.startsWith("/")) return target.replace(/^\//, "");
+  return path.posix.normalize(`${baseDir}/${target}`);
+}
+
+function xmlAttr(tag, attrName) {
+  return tag.match(new RegExp(`\\b${attrName}=["']([^"']+)["']`))?.[1] || "";
+}
+
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 1024 * 1024 * 100, ...options });
   if (result.status !== 0) {
     throw userError("command_failed", `${command} failed: ${result.stderr || result.stdout}`, EXIT.generic);
   }
@@ -1321,6 +1618,9 @@ function parsePages(value) {
 
 function requireScope(config, scope) {
   const token = readToken(config);
+  if (!token?.access_token) {
+    throw userError("auth_required", "Run canvapie auth login first.", EXIT.authRequired);
+  }
   const granted = splitScopes(token?.scope || "");
   if (!granted.includes(scope)) {
     throw userError("missing_scope", `${scope} is required.`, EXIT.missingScope, {
@@ -1410,7 +1710,7 @@ function normalizeError(error) {
       retryable: Boolean(error.retryable),
     },
   };
-  for (const key of ["required_scopes", "remediation", "status", "payload", "candidates"]) {
+  for (const key of ["required_scopes", "remediation", "status", "payload", "candidates", "upstream_error"]) {
     if (error[key] !== undefined) {
       if (key === "candidates") {
         body.candidates = error[key];
@@ -1428,6 +1728,10 @@ function envelope(command, result, artifacts = [], warnings = [], metrics = {}) 
 
 function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function writeJsonLine(value) {
+  process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
 function splitScopes(value) {

@@ -1,10 +1,23 @@
 {
   "name": "canvapie",
   "version": "0.1.0",
+  "description": "Agent-friendly Canva.cn Connect API CLI for design export and PPTX inspection.",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "keywords": [
+    "canva",
+    "canva-cn",
+    "connect-api",
+    "cli",
+    "pptx",
+    "agent"
+  ],
   "bin": {
     "canvapie": "./bin/canvapie.mjs"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
     "start": "node server.mjs",
