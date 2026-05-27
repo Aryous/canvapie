@@ -1,0 +1,14 @@
+{
+  "name": "canvapie",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "canvapie": "./bin/canvapie.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "canvapie": "node ./bin/canvapie.mjs",
+    "check": "node --check server.mjs && node --check bin/canvapie.mjs"
+  }
+}
