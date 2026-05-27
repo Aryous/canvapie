@@ -6,6 +6,29 @@ An agent-first and pipeline-first CLI for Canva.cn Connect API. It lets agents a
 
 This repo also keeps a local OAuth debug service in `server.mjs` for validating the Canva.cn OAuth and Connect API flow.
 
+## Quick Install
+
+Install globally:
+
+```sh
+npm install -g canvapie
+canvapie help
+```
+
+To pin the current version:
+
+```sh
+npm install -g canvapie@0.1.0
+```
+
+Then complete first-time authorization:
+
+```sh
+canvapie init
+canvapie auth login
+canvapie doctor --json
+```
+
 ## Quick Examples
 
 ```sh
@@ -30,9 +53,10 @@ The CLI reads local `.env` and `.tokens.json` first. If no local `.tokens.json` 
 
 ## First-Time Setup
 
-New users start with two commands:
+New users start with install, config, and auth:
 
 ```sh
+npm install -g canvapie
 canvapie init --help
 canvapie init
 canvapie auth login
@@ -108,7 +132,7 @@ In the Canva.cn Connect API integration page:
 
    `design:content:read` is required for PPTX/PDF/image export.
 
-## Local Setup
+## Local Development
 
 Copy the env template:
 
@@ -122,7 +146,7 @@ For local development inside this repo, run the CLI through npm:
 npm run canvapie -- doctor --json
 ```
 
-After `npm link` or package installation, run `canvapie` directly.
+After package installation, run `canvapie` directly.
 
 Then fill these values from your Canva.cn integration:
 
