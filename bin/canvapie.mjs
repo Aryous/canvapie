@@ -8,7 +8,7 @@ import readline from "node:readline/promises";
 import { spawnSync } from "node:child_process";
 import { URL, URLSearchParams } from "node:url";
 
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 const DEFAULT_SCOPES = [
   "design:meta:read",
   "design:content:read",

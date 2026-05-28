@@ -18,7 +18,7 @@ canvapie help
 To pin the current version:
 
 ```sh
-npm install -g canvapie@0.2.0
+npm install -g canvapie@0.2.1
 ```
 
 Then complete first-time authorization:

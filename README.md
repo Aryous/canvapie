@@ -18,7 +18,7 @@ canvapie help
 如果想固定当前版本：
 
 ```sh
-npm install -g canvapie@0.2.0
+npm install -g canvapie@0.2.1
 ```
 
 安装后按这个顺序完成首次授权：
