@@ -101,6 +101,8 @@ Get these values from the Canva.cn Developer Portal:
    design:meta:read design:content:read folder:read asset:read profile:read
    ```
 
+Scopes are configured in two places: the Canva Developer Portal must allow the scope first; `canvapie init --scopes` or saved config scopes only control what the CLI requests during OAuth. They cannot change the Canva integration settings.
+
 If an agent does not know the client ID or client secret, it should ask the user to create/open the Canva.cn Connect API integration and provide those values. It should not guess.
 
 For agents, scripts, or CI, use non-interactive flags:
@@ -134,7 +136,14 @@ In the Canva.cn Connect API integration page:
    design:meta:read design:content:read folder:read asset:read profile:read
    ```
 
-   `design:content:read` is required for PPTX/PDF/image export.
+   `design:content:read` is required for PPTX/PDF/image export and export-format discovery.
+
+If a command returns `missing_scope`, open the Canva Developer Portal Scopes page, enable the returned `required_scopes`, save the integration, then run:
+
+```sh
+canvapie auth login
+canvapie doctor --json
+```
 
 ## Local Development
 

@@ -101,6 +101,8 @@ canvapie doctor --json
    design:meta:read design:content:read folder:read asset:read profile:read
    ```
 
+Scope 是两层配置：Canva Developer Portal 里必须先允许对应 scope；`canvapie init --scopes` 或保存到 config 的 scopes 只决定 CLI 在 OAuth 登录时请求哪些 scope，不能自动修改 Canva 后台勾选项。
+
 如果 Agent 不知道 client ID 或 client secret，应该让用户先创建/打开 Canva.cn Connect API integration 并提供这两个值，不能猜。
 
 如果是 Agent、脚本或 CI，不想走交互输入，可以直接传参：
@@ -134,7 +136,14 @@ CANVA_CLIENT_ID=<client_id> CANVA_CLIENT_SECRET=<client_secret> canvapie init
    design:meta:read design:content:read folder:read asset:read profile:read
    ```
 
-   其中 `design:content:read` 是导出 PPTX/PDF/图片所需权限。
+   其中 `design:content:read` 是导出 PPTX/PDF/图片和查询可导出格式所需权限。
+
+如果某个命令返回 `missing_scope`，先回到 Canva Developer Portal 的 Scopes 页面勾选返回的 `required_scopes`，保存集成，然后重新运行：
+
+```sh
+canvapie auth login
+canvapie doctor --json
+```
 
 ## 本地开发
 

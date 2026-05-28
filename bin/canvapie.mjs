@@ -19,6 +19,7 @@ const DEFAULT_SCOPES = [
 const DEFAULT_REDIRECT_URI = "http://127.0.0.1:3001/oauth/redirect";
 const DEFAULT_WEB_BASE_URL = "https://www.canva.cn";
 const DEFAULT_API_BASE_URL = "https://api.canva.cn/rest/v1";
+const CANVA_DEVELOPER_PORTAL_URL = "https://www.canva.cn/developers/integrations";
 const EXIT = {
   generic: 1,
   invalidArgs: 2,
@@ -278,13 +279,18 @@ USAGE:
 
 WHERE TO GET VALUES:
   1. Open Canva.cn Developer Portal:
-     https://www.canva.cn/developers/integrations
+     ${CANVA_DEVELOPER_PORTAL_URL}
   2. Create or open a Connect API integration.
   3. In Authentication, copy the client ID and client secret.
   4. In Return navigation / redirect URLs, add exactly:
      ${DEFAULT_REDIRECT_URI}
   5. In Scopes, enable:
      ${DEFAULT_SCOPES.join(" ")}
+
+SCOPE MODEL:
+  Canva scopes must be enabled in the Developer Portal first. The --scopes flag
+  only controls what canvapie asks for during OAuth; it cannot change the
+  integration's allowed scopes.
 
 AGENT NOTES:
   If client ID or secret is unavailable, ask the user to create/open the
@@ -969,13 +975,17 @@ function initGuideText() {
   return `Before continuing, create or open your Canva.cn Connect API integration.
 
 Where to get values:
-  1. Open https://www.canva.cn/developers/integrations
+  1. Open ${CANVA_DEVELOPER_PORTAL_URL}
   2. Create or open a Connect API integration.
   3. Copy client ID and client secret from Authentication.
   4. Add this redirect URL in Return navigation / redirect URLs:
      ${DEFAULT_REDIRECT_URI}
   5. Enable scopes:
      ${DEFAULT_SCOPES.join(" ")}
+
+Scope model:
+  Canva scopes must be enabled in the Developer Portal first. The scopes saved
+  by canvapie only control what the CLI requests during OAuth.
 
 Press Enter to keep an existing/default value.
 The client secret input is hidden.
@@ -1917,7 +1927,17 @@ function requireScope(config, scope) {
   if (!granted.includes(scope)) {
     throw userError("missing_scope", `${scope} is required.`, EXIT.missingScope, {
       required_scopes: [scope],
-      remediation: `Run canvapie auth login --scopes "${DEFAULT_SCOPES.join(" ")}"`,
+      canva_developer_portal_url: CANVA_DEVELOPER_PORTAL_URL,
+      remediation:
+        `Enable ${scope} in the Canva.cn Developer Portal, save the integration, then run canvapie auth login again.`,
+      remediation_steps: [
+        `Open ${CANVA_DEVELOPER_PORTAL_URL}`,
+        "Open your Connect API integration.",
+        `Enable ${scope} in Scopes.`,
+        "Save the integration.",
+        "Run canvapie auth login again.",
+        "Run canvapie doctor --json to confirm the token includes the scope.",
+      ],
     });
   }
 }
@@ -2002,7 +2022,16 @@ function normalizeError(error) {
       retryable: Boolean(error.retryable),
     },
   };
-  for (const key of ["required_scopes", "remediation", "status", "payload", "candidates", "upstream_error"]) {
+  for (const key of [
+    "required_scopes",
+    "canva_developer_portal_url",
+    "remediation",
+    "remediation_steps",
+    "status",
+    "payload",
+    "candidates",
+    "upstream_error",
+  ]) {
     if (error[key] !== undefined) {
       if (key === "candidates") {
         body.candidates = error[key];
